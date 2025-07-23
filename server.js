@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const axios = require('axios');
 const cors = require('cors');
 
+// Carrega variáveis do .env
 require('dotenv').config();
 
 const app = express();
@@ -19,7 +20,9 @@ const THRESHOLD = 0.007; // 0.7%
 const API_BASE = 'https://api.jumper.exchange/api/v1';
 
 async function fetchPairs() {
-  const res = await axios.get(`${API_BASE}/pairs`);
+  const res = await axios.get(`${API_BASE}/pairs`, {
+    headers: process.env.JUMPER_API_KEY ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY } : {}
+  });
   return res.data; // ajuste conforme resposta real da API
 }
 
@@ -46,7 +49,7 @@ async function fetchOpportunities() {
   }
 }
 
-// NOVO ENDPOINT para teste no navegador
+// Endpoint para teste no navegador
 app.get('/api/opportunities', async (req, res) => {
   const ops = await fetchOpportunities();
   res.json(ops);
@@ -54,7 +57,7 @@ app.get('/api/opportunities', async (req, res) => {
 
 io.on('connection', socket => console.log('Cliente conectado'));
 
-// Emit via WebSocket
+// Emite via WebSocket
 setInterval(async () => {
   const ops = await fetchOpportunities();
   io.emit('arbOps', ops);
