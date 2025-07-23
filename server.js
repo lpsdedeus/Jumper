@@ -15,12 +15,12 @@ const io = socketIo(server, { cors: { origin: '*' } });
 // ~1.6 req/min ⇒ 37.5s
 const POLL_INTERVAL = 37500;
 const THRESHOLD = 0.007;  // 0.7%
-
-// Base correta da API LI.FI
 const API_BASE = 'https://li.quest/v1';
 
 async function fetchConnections() {
+  // traz todas as conexões (bridges + exchanges)
   const res = await axios.get(`${API_BASE}/connections`, {
+    params: { allowBridges: true, allowExchanges: true },
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
@@ -29,15 +29,15 @@ async function fetchConnections() {
 }
 
 async function quoteConnection(conn) {
-  // Exemplo: 1 token com 18 decimais (wei). Ajuste se necessário.
+  // 1 token em 18 decimais (wei). Ajuste se precisar.
   const amount = 1e18;
   const res = await axios.get(`${API_BASE}/quote`, {
     params: {
-      fromChain: conn.fromChain,
-      toChain: conn.toChain,
+      fromChain:    conn.fromChain,
+      toChain:      conn.toChain,
       fromTokenAddress: conn.fromTokenAddress,
-      toTokenAddress: conn.toTokenAddress,
-      fromAmount: amount
+      toTokenAddress:   conn.toTokenAddress,
+      fromAmount:   amount
     },
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
@@ -48,17 +48,17 @@ async function quoteConnection(conn) {
 
 async function fetchOpportunities() {
   try {
-    const conns = await fetchConnections();
+    const conns  = await fetchConnections();
     const quotes = await Promise.all(conns.map(quoteConnection));
 
     return quotes
       .map(q => {
         const rate = q.toAmount / q.fromAmount - 1;
         return {
-          pair: `${q.fromTokenAddress}/${q.toTokenAddress}`,
+          pair:      `${q.fromTokenAddress}/${q.toTokenAddress}`,
           chainFrom: q.fromChain,
-          chainTo: q.toChain,
-          diff: (rate * 100).toFixed(2) + '%',
+          chainTo:   q.toChain,
+          diff:      (rate * 100).toFixed(2) + '%',
           rate
         };
       })
@@ -76,8 +76,8 @@ async function fetchOpportunities() {
   }
 }
 
-// Suporta ambas rotas
-app.get(['/api/opportunities', '/opportunities'], async (_, res) => {
+// suporte a /opportunities e /api/opportunities
+app.get(['/opportunities','/api/opportunities'], async (_, res) => {
   res.json(await fetchOpportunities());
 });
 
