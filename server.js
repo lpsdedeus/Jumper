@@ -3,8 +3,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const axios = require('axios');
 const cors = require('cors');
-
-// Carrega variáveis do .env
 require('dotenv').config();
 
 const app = express();
@@ -14,57 +12,79 @@ app.use(express.static('public'));
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
-// Poll interval para no máximo 1.6 requisições/minuto (~37.5s)
-const POLL_INTERVAL = 37500;
-const THRESHOLD = 0.007; // 0.7%
-const API_BASE = 'https://api.jumper.exchange/api/v1';
+const POLL_INTERVAL = 37500;    // ~1.6 req/min
+const THRESHOLD = 0.007;        // 0.7%
+const API_BASE = 'https://li.quest/v1';
 
-async function fetchPairs() {
-  const res = await axios.get(`${API_BASE}/pairs`, {
+// 1) Pega todas as conexões (possíveis rotas de swap)
+async function fetchConnections() {
+  const res = await axios.get(`${API_BASE}/connections`, {
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return res.data; // ajuste conforme resposta real da API
+  return res.data; // array de { fromChain, toChain, fromTokenAddress, toTokenAddress, ... }
+}
+
+// 2) Para cada conexão, pede um quote de 1 unidade de token
+async function quoteConnection(conn) {
+  const amount = 1e6; // ex: 1 token (6 decimais) — ajuste conforme cada token
+  const q = await axios.get(`${API_BASE}/quote`, {
+    params: {
+      fromChain: conn.fromChain,
+      toChain: conn.toChain,
+      fromTokenAddress: conn.fromTokenAddress,
+      toTokenAddress: conn.toTokenAddress,
+      fromAmount: amount
+    },
+    headers: process.env.JUMPER_API_KEY
+      ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
+      : {}
+  });
+  return {
+    ...conn,
+    fromAmount: amount,
+    toAmount: q.data.toAmount
+  };
 }
 
 async function fetchOpportunities() {
   try {
-    const pairs = await fetchPairs();
-    const opportunities = [];
+    const conns = await fetchConnections();
+    const quotes = await Promise.all(conns.map(quoteConnection));
 
-    pairs.forEach(pair => {
-      const diff = (pair.fairPrice - pair.price) / pair.price;
-      if (Math.abs(diff) >= THRESHOLD) {
-        opportunities.push({
-          pair: `${pair.base}/${pair.quote}`,
-          chain: pair.chain,
-          price: pair.price,
-          fairPrice: pair.fairPrice,
-          diff: (diff * 100).toFixed(2) + '%'
-        });
-      }
-    });
+    const ops = quotes
+      .map(q => {
+        const rate = q.toAmount / q.fromAmount - 1;
+        return {
+          pair: `${q.fromTokenAddress}/${q.toTokenAddress}`,
+          chainFrom: q.fromChain,
+          chainTo: q.toChain,
+          rate
+        };
+      })
+      .filter(o => Math.abs(o.rate) >= THRESHOLD)
+      .map(o => ({
+        ...o,
+        diff: (o.rate * 100).toFixed(2) + '%'
+      }));
 
-    return opportunities;
+    return ops;
   } catch (err) {
     console.error('Erro ao buscar oportunidades:', err.message);
     return [];
   }
 }
 
-// Endpoint para teste no navegador
+// HTTP endpoint de teste
 app.get('/api/opportunities', async (req, res) => {
-  const ops = await fetchOpportunities();
-  res.json(ops);
+  res.json(await fetchOpportunities());
 });
 
 io.on('connection', socket => console.log('Cliente conectado'));
 
-// Emite via WebSocket
 setInterval(async () => {
-  const ops = await fetchOpportunities();
-  io.emit('arbOps', ops);
+  io.emit('arbOps', await fetchOpportunities());
 }, POLL_INTERVAL);
 
 const PORT = process.env.PORT || 3000;
