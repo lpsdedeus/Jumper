@@ -16,8 +16,8 @@ const io = socketIo(server, { cors: { origin: '*' } });
 const POLL_INTERVAL = 37500;
 const THRESHOLD = 0.007;  // 0.7%
 
-// Base correta da API Li.FI
-const API_BASE = 'https://api.lifi.fi/v1';
+// Base correta da API LI.FI
+const API_BASE = 'https://li.quest/v1';
 
 async function fetchConnections() {
   const res = await axios.get(`${API_BASE}/connections`, {
@@ -25,13 +25,13 @@ async function fetchConnections() {
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return res.data; // array de routes
+  return res.data; // array de conexões
 }
 
 async function quoteConnection(conn) {
-  // Usamos 1 unidade com 18 decimais (1e18) ou ajuste conforme token
+  // Exemplo: 1 token com 18 decimais (wei). Ajuste se necessário.
   const amount = 1e18;
-  const q = await axios.get(`${API_BASE}/quote`, {
+  const res = await axios.get(`${API_BASE}/quote`, {
     params: {
       fromChain: conn.fromChain,
       toChain: conn.toChain,
@@ -43,7 +43,7 @@ async function quoteConnection(conn) {
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return { ...conn, fromAmount: amount, toAmount: q.data.toAmount };
+  return { ...conn, fromAmount: amount, toAmount: res.data.toAmount };
 }
 
 async function fetchOpportunities() {
@@ -66,7 +66,7 @@ async function fetchOpportunities() {
   } catch (err) {
     if (err.response) {
       console.error(
-        `Erro ${err.response.status} da API Li.FI:`,
+        `Erro ${err.response.status} da LI.FI:`,
         JSON.stringify(err.response.data)
       );
     } else {
@@ -76,8 +76,8 @@ async function fetchOpportunities() {
   }
 }
 
-// Torna disponível em /opportunities e /api/opportunities
-app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
+// Suporta ambas rotas
+app.get(['/api/opportunities', '/opportunities'], async (_, res) => {
   res.json(await fetchOpportunities());
 });
 
