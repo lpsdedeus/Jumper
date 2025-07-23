@@ -21,7 +21,9 @@ const API_BASE = 'https://api.jumper.exchange/api/v1';
 
 async function fetchPairs() {
   const res = await axios.get(`${API_BASE}/pairs`, {
-    headers: process.env.JUMPER_API_KEY ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY } : {}
+    headers: process.env.JUMPER_API_KEY
+      ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
+      : {}
   });
   return res.data; // ajuste conforme resposta real da API
 }
@@ -30,6 +32,7 @@ async function fetchOpportunities() {
   try {
     const pairs = await fetchPairs();
     const opportunities = [];
+
     pairs.forEach(pair => {
       const diff = (pair.fairPrice - pair.price) / pair.price;
       if (Math.abs(diff) >= THRESHOLD) {
@@ -42,6 +45,7 @@ async function fetchOpportunities() {
         });
       }
     });
+
     return opportunities;
   } catch (err) {
     console.error('Erro ao buscar oportunidades:', err.message);
