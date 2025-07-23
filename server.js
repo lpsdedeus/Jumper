@@ -12,23 +12,25 @@ app.use(express.static('public'));
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
-const POLL_INTERVAL = 37500;    // ~1.6 req/min
-const THRESHOLD = 0.007;        // 0.7%
-const API_BASE = 'https://li.quest/v1';
+// ~1.6 req/min ⇒ 37.5s
+const POLL_INTERVAL = 37500;
+const THRESHOLD = 0.007;  // 0.7%
 
-// 1) Pega todas as conexões (possíveis rotas de swap)
+// Base correta da API Li.FI
+const API_BASE = 'https://api.lifi.fi/v1';
+
 async function fetchConnections() {
   const res = await axios.get(`${API_BASE}/connections`, {
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return res.data; // array de { fromChain, toChain, fromTokenAddress, toTokenAddress, ... }
+  return res.data; // array de routes
 }
 
-// 2) Para cada conexão, pede um quote de 1 unidade de token
 async function quoteConnection(conn) {
-  const amount = 1e6; // ex: 1 token (6 decimais) — ajuste conforme cada token
+  // Usamos 1 unidade com 18 decimais (1e18) ou ajuste conforme token
+  const amount = 1e18;
   const q = await axios.get(`${API_BASE}/quote`, {
     params: {
       fromChain: conn.fromChain,
@@ -41,11 +43,7 @@ async function quoteConnection(conn) {
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return {
-    ...conn,
-    fromAmount: amount,
-    toAmount: q.data.toAmount
-  };
+  return { ...conn, fromAmount: amount, toAmount: q.data.toAmount };
 }
 
 async function fetchOpportunities() {
@@ -53,35 +51,37 @@ async function fetchOpportunities() {
     const conns = await fetchConnections();
     const quotes = await Promise.all(conns.map(quoteConnection));
 
-    const ops = quotes
+    return quotes
       .map(q => {
         const rate = q.toAmount / q.fromAmount - 1;
         return {
           pair: `${q.fromTokenAddress}/${q.toTokenAddress}`,
           chainFrom: q.fromChain,
           chainTo: q.toChain,
+          diff: (rate * 100).toFixed(2) + '%',
           rate
         };
       })
-      .filter(o => Math.abs(o.rate) >= THRESHOLD)
-      .map(o => ({
-        ...o,
-        diff: (o.rate * 100).toFixed(2) + '%'
-      }));
-
-    return ops;
+      .filter(o => Math.abs(o.rate) >= THRESHOLD);
   } catch (err) {
-    console.error('Erro ao buscar oportunidades:', err.message);
+    if (err.response) {
+      console.error(
+        `Erro ${err.response.status} da API Li.FI:`,
+        JSON.stringify(err.response.data)
+      );
+    } else {
+      console.error('Erro ao buscar oportunidades:', err.message);
+    }
     return [];
   }
 }
 
-// HTTP endpoint de teste
-app.get('/api/opportunities', async (req, res) => {
+// Torna disponível em /opportunities e /api/opportunities
+app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
   res.json(await fetchOpportunities());
 });
 
-io.on('connection', socket => console.log('Cliente conectado'));
+io.on('connection', () => console.log('Cliente conectado'));
 
 setInterval(async () => {
   io.emit('arbOps', await fetchOpportunities());
