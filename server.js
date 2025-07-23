@@ -13,36 +13,32 @@ app.use(express.static('public'));
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
-// Poll interval calculado para no máximo 1.6 requisições/minuto → 60s / 1.6 ≈ 37.5s
-const POLL_INTERVAL = 37500; // em milissegundos
+// Poll interval para no máximo 1.6 requisições/minuto (~37.5s)
+const POLL_INTERVAL = 37500;
 const THRESHOLD = 0.007; // 0.7%
-
-// Base URL da API pública da Jumper
 const API_BASE = 'https://api.jumper.exchange/api/v1';
 
 async function fetchPairs() {
   const res = await axios.get(`${API_BASE}/pairs`);
-  return res.data; // ajustar conforme resposta real da API
+  return res.data; // ajuste conforme resposta real da API
 }
 
 async function fetchOpportunities() {
   try {
     const pairs = await fetchPairs();
     const opportunities = [];
-
-    for (let pair of pairs) {
-      // Exemplo: pair = { base, quote, price, fairPrice }
+    pairs.forEach(pair => {
       const diff = (pair.fairPrice - pair.price) / pair.price;
       if (Math.abs(diff) >= THRESHOLD) {
         opportunities.push({
           pair: `${pair.base}/${pair.quote}`,
+          chain: pair.chain,
           price: pair.price,
           fairPrice: pair.fairPrice,
           diff: (diff * 100).toFixed(2) + '%'
         });
       }
-    }
-
+    });
     return opportunities;
   } catch (err) {
     console.error('Erro ao buscar oportunidades:', err.message);
@@ -50,12 +46,15 @@ async function fetchOpportunities() {
   }
 }
 
-io.on('connection', (socket) => {
-  console.log('Cliente conectado');
-  socket.on('disconnect', () => console.log('Cliente desconectado'));
+// NOVO ENDPOINT para teste no navegador
+app.get('/api/opportunities', async (req, res) => {
+  const ops = await fetchOpportunities();
+  res.json(ops);
 });
 
-// Poll e envia via WebSocket respeitando 1.6 req/min
+io.on('connection', socket => console.log('Cliente conectado'));
+
+// Emit via WebSocket
 setInterval(async () => {
   const ops = await fetchOpportunities();
   io.emit('arbOps', ops);
