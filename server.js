@@ -1,3 +1,4 @@
+// server.js completo atualizado com logs de oportunidades
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -12,7 +13,6 @@ app.use(express.static('public'));
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
-// ~1.6 req/min ⇒ 37.5s
 const POLL_INTERVAL = 37500;
 const THRESHOLD = 0.007;  // 0.7%
 const API_BASE = 'https://li.quest/v1';
@@ -24,14 +24,12 @@ async function fetchConnections() {
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  // LI.FI retorna um objeto com 'connections' ou um array direto
   const data = res.data.connections || res.data;
   return Array.isArray(data) ? data : [];
 }
 
 async function quoteConnection(conn) {
-  // Ajuste o amount conforme os decimais do token (ex.: 1e18 para ERC-20)
-  const amount = 1e18;
+  const amount = 1e18; // 1 token em wei
   const res = await axios.get(`${API_BASE}/quote`, {
     params: {
       fromChain:        conn.fromChain,
@@ -77,7 +75,7 @@ async function fetchOpportunities() {
   }
 }
 
-// Suporta rotas /opportunities e /api/opportunities
+// Rotas HTTP
 app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
   const ops = await fetchOpportunities();
   if (!ops || ops.length === 0) {
@@ -88,8 +86,15 @@ app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
 
 io.on('connection', () => console.log('Cliente conectado'));
 
+// LOGS DE OPORTUNIDADES A CADA INTERVALO
 setInterval(async () => {
-  io.emit('arbOps', await fetchOpportunities());
+  const ops = await fetchOpportunities();
+  if (ops.length > 0) {
+    console.log(`Oportunidades encontradas:`, ops);
+  } else {
+    console.log(`Nenhuma oportunidade no momento`);
+  }
+  io.emit('arbOps', ops);
 }, POLL_INTERVAL);
 
 const PORT = process.env.PORT || 3000;
