@@ -20,7 +20,11 @@ const API_BASE = 'https://li.quest/v1';
 async function fetchConnections() {
   // traz todas as conexões (bridges + exchanges)
   const res = await axios.get(`${API_BASE}/connections`, {
-    params: { allowBridges: true, allowExchanges: true },
+    // envia como arrays de string
+    params: { 
+      allowBridges: ['all'], 
+      allowExchanges: ['all'] 
+    },
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
@@ -29,15 +33,14 @@ async function fetchConnections() {
 }
 
 async function quoteConnection(conn) {
-  // 1 token em 18 decimais (wei). Ajuste se precisar.
-  const amount = 1e18;
+  const amount = 1e18; // 1 token em wei (ajuste se precisar)
   const res = await axios.get(`${API_BASE}/quote`, {
     params: {
-      fromChain:    conn.fromChain,
-      toChain:      conn.toChain,
+      fromChain:        conn.fromChain,
+      toChain:          conn.toChain,
       fromTokenAddress: conn.fromTokenAddress,
       toTokenAddress:   conn.toTokenAddress,
-      fromAmount:   amount
+      fromAmount:       amount
     },
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
@@ -76,7 +79,7 @@ async function fetchOpportunities() {
   }
 }
 
-// suporte a /opportunities e /api/opportunities
+// suporte a ambas rotas
 app.get(['/opportunities','/api/opportunities'], async (_, res) => {
   res.json(await fetchOpportunities());
 });
