@@ -24,14 +24,14 @@ async function fetchConnections() {
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  // LI.FI retorna um objeto com 'connections' ou diretamente um array
+  // LI.FI retorna um objeto com 'connections' ou um array direto
   const data = res.data.connections || res.data;
   return Array.isArray(data) ? data : [];
 }
 
 async function quoteConnection(conn) {
-  // Ajuste o amount conforme os decimais de cada token
-  const amount = 1e18; // 1 token em wei para ERC‑20
+  // Ajuste o amount conforme os decimais do token (ex.: 1e18 para ERC-20)
+  const amount = 1e18;
   const res = await axios.get(`${API_BASE}/quote`, {
     params: {
       fromChain:        conn.fromChain,
@@ -79,7 +79,11 @@ async function fetchOpportunities() {
 
 // Suporta rotas /opportunities e /api/opportunities
 app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
-  res.json(await fetchOpportunities());
+  const ops = await fetchOpportunities();
+  if (!ops || ops.length === 0) {
+    return res.json({ message: 'Nenhuma oportunidade encontrada' });
+  }
+  res.json(ops);
 });
 
 io.on('connection', () => console.log('Cliente conectado'));
