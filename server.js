@@ -18,22 +18,20 @@ const THRESHOLD = 0.007;  // 0.7%
 const API_BASE = 'https://li.quest/v1';
 
 async function fetchConnections() {
-  // traz todas as conexões (bridges + exchanges)
   const res = await axios.get(`${API_BASE}/connections`, {
-    // envia como arrays de string
-    params: { 
-      allowBridges: ['all'], 
-      allowExchanges: ['all'] 
-    },
+    params: { allowBridges: ['all'], allowExchanges: ['all'] },
     headers: process.env.JUMPER_API_KEY
       ? { 'x-lifi-api-key': process.env.JUMPER_API_KEY }
       : {}
   });
-  return res.data; // array de conexões
+  // LI.FI retorna um objeto com 'connections' ou diretamente um array
+  const data = res.data.connections || res.data;
+  return Array.isArray(data) ? data : [];
 }
 
 async function quoteConnection(conn) {
-  const amount = 1e18; // 1 token em wei (ajuste se precisar)
+  // Ajuste o amount conforme os decimais de cada token
+  const amount = 1e18; // 1 token em wei para ERC‑20
   const res = await axios.get(`${API_BASE}/quote`, {
     params: {
       fromChain:        conn.fromChain,
@@ -79,8 +77,8 @@ async function fetchOpportunities() {
   }
 }
 
-// suporte a ambas rotas
-app.get(['/opportunities','/api/opportunities'], async (_, res) => {
+// Suporta rotas /opportunities e /api/opportunities
+app.get(['/opportunities', '/api/opportunities'], async (_, res) => {
   res.json(await fetchOpportunities());
 });
 
